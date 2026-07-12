@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>지뢰찾기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body {
+            background-color: #1e293b; /* slate-800 */
+            color: #f8fafc; /* slate-50 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            touch-action: manipulation; /* 모바일 더블 탭 확대 방지 */
+        }
+
+        .game-container {
+            background-color: #334155; /* slate-700 */
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+            overflow-x: auto; /* 큰 보드가 화면을 넘어갈 때 스크롤 허용 */
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #0f172a; /* slate-900 */
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 4px solid #475569; /* slate-600 */
+            border-top-color: #64748b;
+            border-left-color: #64748b;
+            border-bottom-color: #1e293b;
+            border-right-color: #1e293b;
+        }
+
+        .digital-display {
+            font-family: 'VT323', monospace;
+            background-color: black;
+            color: #ef4444; /* red-500 */
+            padding: 4px 12px;
+            font-size: 2rem;
+            border-radius: 4px;
+            min-width: 80px;
+            text-align: right;
+            line-height: 1;
+            letter-spacing: 2px;
+        }
+
+        .reset-btn {
+            font-size: 2rem;
+            background-color: #e2e8f0; /* slate-200 */
+            border: none;
+            cursor: pointer;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: transform 0.1s;
+        }
+
+        .reset-btn:active {
+            transform: scale(0.95);
+        }
+
+        #board {
+            display: grid;
+            gap: 2px;
+            background-color: #94a3b8; /* slate-400 */
+            padding: 4px;
+            border-radius: 4px;
+            margin: 0 auto;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: #cbd5e1; /* slate-300 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            cursor: pointer;
+            user-select: none;
+            /* 3D 엠보싱 효과 (닫힌 상태) */
+            border: 3px solid;
+            border-top-color: #f1f5f9;
+            border-left-color: #f1f5f9;
+            border-bottom-color: #64748b;
+            border-right-color: #64748b;
+        }
+
+        @media (max-width: 600px) {
+            .cell {
+                width: 25px;
+                height: 25px;
+                font-size: 0.9rem;
+                border-width: 2px;
+            }
+        }
+
+        .cell:active:not(.revealed):not(.flagged) {
+            border: 1px solid #94a3b8;
+            background-color: #e2e8f0;
+        }
+
+        .cell.revealed {
+            background-color: #e2e8f0; /* slate-200 */
+            border: 1px solid #cbd5e1; /* slate-300 */
+            cursor: default;
+        }
+
+        .cell[data-mines="1"] { color: #3b82f6; } /* blue-500 */
+        .cell[data-mines="2"] { color: #22c55e; } /* green-500 */
+        .cell[data-mines="3"] { color: #ef4444; } /* red-500 */
+        .cell[data-mines="4"] { color: #1e3a8a; } /* blue-900 */
+        .cell[data-mines="5"] { color: #7f1d1d; } /* red-900 */
+        .cell[data-mines="6"] { color: #0d9488; } /* teal-600 */
+        .cell[data-mines="7"] { color: #000000; } /* black */
+        .cell[data-mines="8"] { color: #52525b; } /* zinc-600 */
+
+        .cell.mine {
+            background-color: #ef4444; /* red-500 */
+            border-color: #ef4444;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        select, button {
+            background-color: #475569;
+            color: white;
+            border: 1px solid #64748b;
+            padding: 8px 16px;
+            border-radius: 6px;
+            outline: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        button:hover, select:hover {
+            background-color: #64748b;
+        }
+        
+        /* 모바일 환경을 위한 우클릭 토글 버튼 */
+        #flag-toggle {
+            display: none;
+        }
+        @media (hover: none) and (pointer: coarse) {
+            #flag-toggle {
+                display: block;
+            }
+        }
+        .flag-mode-active {
+            background-color: #ef4444 !important; /* red-500 */
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-4xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 tracking-wider">MINESWEEPER</h1>
+
+    <div class="controls">
+        <select id="difficulty">
+            <option value="beginner">초급 (9x9, 지뢰 10개)</option>
+            <option value="intermediate">중급 (16x16, 지뢰 40개)</option>
+            <option value="expert">고급 (30x16, 지뢰 99개)</option>
+        </select>
+        <button id="flag-toggle">🚩 깃발 모드: 끄기</button>
+    </div>
+
+    <div class="game-container">
+        <div class="header">
+            <div id="mine-count" class="digital-display">010</div>
+            <button id="reset-btn" class="reset-btn">🙂</button>
+            <div id="timer" class="digital-display">000</div>
+        </div>
+        <div id="board"></div>
+    </div>
+
+    <p class="mt-8 text-slate-400 text-sm text-center max-w-md">
+        <b>PC:</b> 좌클릭(열기), 우클릭(깃발 꽂기)<br>
+        <b>모바일:</b> '깃발 모드' 버튼을 눌러 모드를 전환하거나, 길게 눌러 깃발을 꽂을 수 있습니다.
+    </p>
+
+    <script>
+        const boardEl = document.getElementById('board');
+        const mineCountEl = document.getElementById('mine-count');
+        const timerEl = document.getElementById('timer');
+        const resetBtn = document.getElementById('reset-btn');
+        const difficultySelect = document.getElementById('difficulty');
+        const flagToggleBtn = document.getElementById('flag-toggle');
+
+        const DIFFICULTIES = {
+            beginner: { rows: 9, cols: 9, mines: 10 },
+            intermediate: { rows: 16, cols: 16, mines: 40 },
+            expert: { rows: 16, cols: 30, mines: 99 } // 가로를 길게 (cols: 30)
+        };
+
+        let currentDiff = DIFFICULTIES.beginner;
+        let board = [];
+        let minesLeft = 0;
+        let cellsRevealed = 0;
+        let isGameOver = false;
+        let isFirstClick = true;
+        
+        let timerInterval = null;
+        let timeElapsed = 0;
+
+        let flagMode = false; // 모바일용 깃발 모드 상태
+
+        difficultySelect.addEventListener('change', (e) => {
+            currentDiff = DIFFICULTIES[e.target.value];
+            initGame();
+        });
+
+        resetBtn.addEventListener('click', initGame);
+
+        flagToggleBtn.addEventListener('click', () => {
+            flagMode = !flagMode;
+            if (flagMode) {
+                flagToggleBtn.textContent = '🚩 깃발 모드: 켜기';
+                flagToggleBtn.classList.add('flag-mode-active');
+            } else {
+                flagToggleBtn.textContent = '🚩 깃발 모드: 끄기';
+                flagToggleBtn.classList.remove('flag-mode-active');
+            }
+        });
+
+        // 우클릭 컨텍스트 메뉴 방지
+        boardEl.addEventListener('contextmenu', e => e.preventDefault());
+
+        function initGame() {
+            clearInterval(timerInterval);
+            timeElapsed = 0;
+            updateTimerDisplay();
+            
+            isGameOver = false;
+            isFirstClick = true;
+            cellsRevealed = 0;
+            minesLeft = currentDiff.mines;
+            updateMineCountDisplay();
+            resetBtn.textContent = '🙂';
+
+            // 보드 배열 초기화
+            board = [];
+            for (let r = 0; r < currentDiff.rows; r++) {
+                let row = [];
+                for (let c = 0; c < currentDiff.cols; c++) {
+                    row.push({
+                        r, c,
+                        isMine: false,
+                        isRevealed: false,
+                        isFlagged: false,
+                        neighborMines: 0
+                    });
+                }
+                board.push(row);
+            }
+
+            renderBoard();
+        }
+
+        function renderBoard() {
+            boardEl.innerHTML = '';
+            boardEl.style.gridTemplateColumns = `repeat(${currentDiff.cols}, max-content)`;
+            boardEl.style.gridTemplateRows = `repeat(${currentDiff.rows}, max-content)`;
+
+            for (let r = 0; r < currentDiff.rows; r++) {
+                for (let c = 0; c < currentDiff.cols; c++) {
+                    const cellEl = document.createElement('div');
+                    cellEl.classList.add('cell');
+                    cellEl.dataset.r = r;
+                    cellEl.dataset.c = c;
+
+                    // 마우스 이벤트 (PC)
+                    cellEl.addEventListener('mousedown', handleCellClick);
+                    
+                    // 모바일용 롱프레스 (길게 누르기) 구현
+                    let pressTimer;
+                    cellEl.addEventListener('touchstart', (e) => {
+                        if(isGameOver) return;
+                        pressTimer = window.setTimeout(() => {
+                            // 길게 누르면 우클릭(깃발) 효과
+                            e.preventDefault(); 
+                            toggleFlag(r, c);
+                            pressTimer = null;
+                        }, 500); // 0.5초 길게 누름
+                    }, {passive: false});
+
+                    cellEl.addEventListener('touchend', (e) => {
+                        if (pressTimer !== null) {
+                            clearTimeout(pressTimer);
+                            // 길게 누르지 않고 일찍 뗐으면 일반 클릭(열기) 효과
+                            if (!isGameOver) {
+                                // 단, 깃발 모드가 켜져있으면 터치도 깃발 꽂기로 처리
+                                if(flagMode) {
+                                    e.preventDefault();
+                                    toggleFlag(r, c);
+                                } else {
+                                    // 기본 클릭 로직은 mousedown에서 처리되거나, 터치 기기의 경우 여기서 수동 호출
+                                    // (브라우저가 터치 후 click 이벤트를 발생시키므로 여기서는 생략 가능하지만, 
+                                    // 확실한 제어를 위해 브라우저 기본 이벤트를 막고 직접 호출)
+                                    // 하지만 mousedown에 바인딩 되어있으므로 모바일 브라우저 호환성을 위해 
+                                    // 복잡한 터치 이벤트를 mousedown에 의존하게 둠.
+                                }
+                            }
+                        }
+                    });
+                    cellEl.addEventListener('touchmove', () => {
+                        if(pressTimer !== null) clearTimeout(pressTimer); // 스와이프 시 롱프레스 취소
+                    });
+
+                    boardEl.appendChild(cellEl);
+                }
+            }
+        }
+
+        function handleCellClick(e) {
+            if (isGameOver) return;
+
+            const r = parseInt(e.target.dataset.r);
+            const c = parseInt(e.target.dataset.c);
+
+            // 우클릭이거나 모바일에서 깃발 모드가 켜진 상태로 좌클릭한 경우
+            if (e.button === 2 || (e.button === 0 && flagMode)) {
+                toggleFlag(r, c);
+            } 
+            // 좌클릭
+            else if (e.button === 0) {
+                if (board[r][c].isFlagged) return; // 깃발 꽂힌 곳은 안 열림
+
+                if (isFirstClick) {
+                    placeMines(r, c);
+                    calculateNeighbors();
+                    startTimer();
+                    isFirstClick = false;
+                }
+
+                revealCell(r, c);
+            }
+        }
+
+        function placeMines(firstR, firstC) {
+            let minesPlaced = 0;
+            while (minesPlaced < currentDiff.mines) {
+                const r = Math.floor(Math.random() * currentDiff.rows);
+                const c = Math.floor(Math.random() * currentDiff.cols);
+
+                // 지뢰가 없는 빈 곳이고, 첫 클릭한 곳(및 그 주변 1칸 - 옵션이지만 여기선 첫칸만)이 아닐 때 배치
+                if (!board[r][c].isMine && (r !== firstR || c !== firstC)) {
+                    board[r][c].isMine = true;
+                    minesPlaced++;
+                }
+            }
+        }
+
+        function calculateNeighbors() {
+            for (let r = 0; r < currentDiff.rows; r++) {
+                for (let c = 0; c < currentDiff.cols; c++) {
+                    if (board[r][c].isMine) continue;
+
+                    let count = 0;
+                    // 주변 8방향 검사
+                    for (let i = -1; i <= 1; i++) {
+                        for (let j = -1; j <= 1; j++) {
+                            if (i === 0 && j === 0) continue;
+                            const nr = r + i;
+                            const nc = c + j;
+                            // 보드 범위 내에 있고 지뢰이면 카운트 증가
+                            if (nr >= 0 && nr < currentDiff.rows && nc >= 0 && nc < currentDiff.cols) {
+                                if (board[nr][nc].isMine) count++;
+                            }
+                        }
+                    }
+                    board[r][c].neighborMines = count;
+                }
+            }
+        }
+
+        function revealCell(r, c) {
+            const cell = board[r][c];
+            if (cell.isRevealed || cell.isFlagged) return;
+
+            cell.isRevealed = true;
+            cellsRevealed++;
+            
+            const cellEl = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+            cellEl.classList.add('revealed');
+
+            // 지뢰를 밟은 경우
+            if (cell.isMine) {
+                cellEl.classList.add('mine');
+                cellEl.textContent = '💣';
+                gameOver(false);
+                return;
+            }
+
+            // 주변 지뢰 개수 표시
+            if (cell.neighborMines > 0) {
+                cellEl.textContent = cell.neighborMines;
+                cellEl.setAttribute('data-mines', cell.neighborMines);
+            } else {
+                // 주변에 지뢰가 0개면(빈 칸) 연쇄적으로 열기 (Flood Fill 알고리즘)
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        const nr = r + i;
+                        const nc = c + j;
+                        if (nr >= 0 && nr < currentDiff.rows && nc >= 0 && nc < currentDiff.cols) {
+                            revealCell(nr, nc);
+                        }
+                    }
+                }
+            }
+
+            checkWin();
+        }
+
+        function toggleFlag(r, c) {
+            const cell = board[r][c];
+            if (cell.isRevealed) return;
+
+            const cellEl = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+
+            if (cell.isFlagged) {
+                cell.isFlagged = false;
+                cellEl.textContent = '';
+                cellEl.classList.remove('flagged');
+                minesLeft++;
+            } else {
+                if (minesLeft > 0) {
+                    cell.isFlagged = true;
+                    cellEl.textContent = '🚩';
+                    cellEl.classList.add('flagged');
+                    minesLeft--;
+                }
+            }
+            updateMineCountDisplay();
+        }
+
+        function checkWin() {
+            const totalCells = currentDiff.rows * currentDiff.cols;
+            const nonMineCells = totalCells - currentDiff.mines;
+
+            // 지뢰가 아닌 모든 셀을 열었다면 승리
+            if (cellsRevealed === nonMineCells) {
+                gameOver(true);
+            }
+        }
+
+        function gameOver(win) {
+            isGameOver = true;
+            clearInterval(timerInterval);
+
+            if (win) {
+                resetBtn.textContent = '😎'; // 승리
+                // 남은 지뢰에 모두 깃발 꽂기
+                for (let r = 0; r < currentDiff.rows; r++) {
+                    for (let c = 0; c < currentDiff.cols; c++) {
+                        if (board[r][c].isMine && !board[r][c].isFlagged) {
+                            toggleFlag(r, c);
+                        }
+                    }
+                }
+            } else {
+                resetBtn.textContent = '😵'; // 패배
+                // 모든 지뢰 공개 (잘못 꽂은 깃발 표시 포함)
+                for (let r = 0; r < currentDiff.rows; r++) {
+                    for (let c = 0; c < currentDiff.cols; c++) {
+                        const cell = board[r][c];
+                        const cellEl = document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+                        
+                        if (cell.isMine && !cell.isFlagged && !cell.isRevealed) {
+                            cellEl.classList.add('revealed');
+                            cellEl.textContent = '💣'; // 지뢰 공개
+                        } else if (!cell.isMine && cell.isFlagged) {
+                            // 잘못 꽂은 깃발
+                            cellEl.textContent = '❌'; 
+                            cellEl.style.backgroundColor = '#fecaca'; // 연한 빨강
+                        }
+                    }
+                }
+            }
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timeElapsed++;
+                if (timeElapsed > 999) timeElapsed = 999; // 최대 표시 999초
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            timerEl.textContent = timeElapsed.toString().padStart(3, '0');
+        }
+
+        function updateMineCountDisplay() {
+            // 남은 지뢰가 음수일 경우 (깃발을 너무 많이 꽂은 경우) 처리
+            let displayNum = minesLeft;
+            let prefix = '';
+            if (minesLeft < 0) {
+                displayNum = Math.abs(minesLeft);
+                prefix = '-';
+            }
+            // 세 자리 포맷 맞추기 (예: -01, 010)
+            let formattedStr = displayNum.toString().padStart(minesLeft < 0 ? 2 : 3, '0');
+            mineCountEl.textContent = prefix + formattedStr;
+        }
+
+        // 초기 실행
+        window.onload = initGame;
+
+    </script>
+</body>
+</html>
